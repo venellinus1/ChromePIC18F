@@ -1,0 +1,146 @@
+var MY_HID_VENDOR_ID  = 1240; //  
+var MY_HID_PRODUCT_ID = XXXXX;
+var DEVICE_INFO = {"vendorId": MY_HID_VENDOR_ID, "productId": MY_HID_PRODUCT_ID };
+var connectionId = null;
+
+
+function arrayBufferToString(array) {
+  return String.fromCharCode.apply(null, new Uint8Array(array));
+}
+
+var miniCRYPTOEnc = function(data,key){
+var size = 64;
+
+//format is as follows : 
+//command id; command param; data
+//1,		1,
+//enc cmd	use key1
+var bytes = new Uint8Array([1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+var encryptdata = _appendBuffer(bytes,new Uint8Array(data).buffer);
+
+chrome.hid.send(connectionId,0,encryptdata,function(e) {console.log("encrypt"); });
+
+chrome.hid.receive(connectionId, function(reportid,dataenc) {
+	  if (dataenc != null) {
+		// Convert Byte into Ascii to follow the format of our device
+		var dataview = new Uint8Array(dataenc);
+		console.log(dataview);
+//data to encrypt [49, 50, 51, 52, 53, 49, 50, 51, 52, 53, 49, 50, 51, 52, 0, 200]
+//
+//encrypted response test
+//[1, 176, 77, 91, 214, 62, 15, 186, 109, 189, 124, 245, 55, 160, 159, 154, 71, 167, 140, 216, 12, 223, 1, 143, 139, 187, 149, 244, 230, 119, 92, 118, 219, 220, 116, 13, 62, 158, 29, 191, 172, 241, 220, 0, 229, 239, 193, 10, 64, 38, 220, 204, 123, 79, 81, 187, 52, 17, 58, 195, 131, 202, 241, 187]
+	
+//return dataenc;		
+}
+});
+}
+
+var miniCRYPTODec = function(data,key){
+var size = 64;
+
+//format is as follows : 
+//command id; command param; data
+//3,		1,
+//dec cmd,	use key1, key data
+//
+var bytes = new Uint8Array([3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 92, 144, 113, 71, 203, 243, 235, 141, 214, 120, 152, 41, 93, 1, 252]);
+
+var decryptdata = _appendBuffer(bytes,new Uint8Array(data).buffer);
+
+//chrome.hid.send(connectionId,0,new Uint8Array(data).buffer,function(e) {console.log("encrypt"); });
+
+//credits
+//https://gist.github.com/72lions/4528834
+
+chrome.hid.send(connectionId,0,bytes.buffer,function(e) {console.log("decrypt"); });
+chrome.hid.receive(connectionId, function(reportid,datadec) {
+	  if (datadec != null) {
+		// Convert Byte into Ascii to follow the format of our device
+		//var dataview = new Uint8Array(datadec);
+	//	console.log(dataview);
+//return datadec;		
+}
+});
+}
+
+var _appendBuffer = function(buffer1, buffer2) {
+  var tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength);
+  tmp.set(new Uint8Array(buffer1), 0);
+  tmp.set(new Uint8Array(buffer2), buffer1.byteLength);
+  return tmp.buffer;
+};
+
+
+
+var miniCRYPTOUnlock = function(pin) {
+
+  //make sure HID is init first
+	if (connectionId == undefined){
+		initializeHid();
+	}
+
+	var size = 64;
+	var bytes = [];
+	for (var i = 0; i < pin.length; ++i) {
+  	  bytes.push(pin.charCodeAt(i));
+	}
+
+//69 is the command byte
+chrome.hid.send(connectionId,0,new Uint8Array([69, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]]).buffer,function(e) {console.log("check PIN"); 
+	  
+	chrome.hid.receive(connectionId, function(reportid,data) {
+	if (data != null) {//just in case - check if incoming data is not null
+		// Convert Byte into Ascii to follow the format of our device
+		var dataview = new Uint8Array(data);//convert incoming data to array
+		console.log(dataview[15]);//debug
+		if (dataview[15] == 0x55)//
+		{//replace with return code
+			console.log('pin ok');
+			return true;
+		}//else return code wrong pin
+		else{
+			console.log('pin is wrong');
+			return false;
+		}
+
+	}
+	else
+	{//replace with return code
+		console.log('Data is null!!!');
+		initializeHid();
+		setTimeout(miniCRYPTOUnlock(pin), 300);
+	}
+	});});
+
+  
+}
+
+function onReceive(event)
+{
+//integer reportId, ArrayBuffer data
+}
+
+function initializeHid() {
+	chrome.hid.getDevices(DEVICE_INFO, function(devices) {
+		if (!devices || !devices.length) {
+		  console.log('device not found');
+		  return;
+		}
+		console.log('Found device: ' + devices[0].deviceId);
+		myHidDevice = devices[0].deviceId;
+
+		// Connect to the HID device
+		chrome.hid.connect(myHidDevice, function(connection) {
+			console.log('Connected to the HID device!'+ connection.connectionId);
+		  	connectionId = connection.connectionId;
+			// Poll the USB HID Interrupt pipe
+			
+		});
+	});
+}
+
+initializeHid();
+
+
+
